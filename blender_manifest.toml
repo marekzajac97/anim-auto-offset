@@ -21,5 +21,6 @@ license = [
 paths_exclude_pattern = [
   "/.git/",
   "__pycache__/",
-  "/.vscode/"
+  "/.vscode/",
+  "/img/"
 ]
