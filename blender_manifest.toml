@@ -1,0 +1,25 @@
+schema_version = "1.0.0"
+
+id = "anim_auto_offset"
+version = "1.0.0"
+name = "Animation Auto Offset"
+tagline = "Update all keyframes relatively on transform changes"
+maintainer = "Marek Zajac"
+type = "add-on"
+
+website = "https://github.com/marekzajac97/anim-auto-offset"
+
+tags = ["Animation", "Sequencer"]
+
+blender_version_min = "4.2.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
+
+[build]
+paths_exclude_pattern = [
+  "/.git/",
+  "__pycache__/",
+  "/.vscode/"
+]
