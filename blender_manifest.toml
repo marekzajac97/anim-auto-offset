@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "anim_auto_offset"
-version = "1.0.0"
+version = "1.1.0"
 name = "Animation Auto Offset"
 tagline = "Update all keyframes relatively on transform changes"
 maintainer = "Marek Zajac"
@@ -22,5 +22,8 @@ paths_exclude_pattern = [
   "/.git/",
   "__pycache__/",
   "/.vscode/",
-  "/img/"
+  "/img/",
+  ".gitignore",
+  "README.md",
+  "*.zip"
 ]
