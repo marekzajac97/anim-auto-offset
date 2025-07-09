@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "anim_auto_offset"
-version = "1.1.0"
+version = "1.1.1"
 name = "Animation Auto Offset"
 tagline = "Update all keyframes relatively on transform changes"
 maintainer = "Marek Zajac"
@@ -11,7 +11,7 @@ website = "https://github.com/marekzajac97/anim-auto-offset"
 
 tags = ["Animation", "Sequencer"]
 
-blender_version_min = "4.2.0"
+blender_version_min = "4.4.0"
 
 license = [
   "SPDX:GPL-3.0-or-later",
