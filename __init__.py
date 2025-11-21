@@ -17,14 +17,35 @@ def _get_obj_fcurves(obj, data_path=None):
             continue
         yield fcurve
 
+def transform_kp_attr(keyframe_points, attr, delta):
+    attr_vals = [None] * len(keyframe_points) * 2
+    keyframe_points.foreach_get(attr, attr_vals)
+    for i in list(range(1, len(attr_vals), 2)):
+        attr_vals[i] += delta
+    keyframe_points.foreach_set(attr, attr_vals)
+
+def transform_kp_attr_selected(keyframe_points, attr, select_attr, delta):
+    attr_vals = [None] * len(keyframe_points) * 2
+    keyframe_points.foreach_get(attr, attr_vals)
+    selected = [None] * len(keyframe_points)
+    keyframe_points.foreach_get(select_attr, selected)
+    for i in list(range(1, len(attr_vals), 2)):
+        if selected:
+            attr_vals[i] += delta
+    keyframe_points.foreach_set(attr, attr_vals)
+
+KP_ATTRS = {
+    'co': 'select_control_point',
+    'handle_left': 'select_left_handle',
+    'handle_right': 'select_right_handle',
+}
+
 def transform_keyframe_points(fcurve, delta, only_selected=False):
-    for kp in fcurve.keyframe_points:
-        if not only_selected or only_selected and kp.select_left_handle:
-            kp.handle_left[1] += delta
-        if not only_selected or only_selected and kp.select_right_handle:
-            kp.handle_right[1] += delta
-        if not only_selected or only_selected and kp.select_control_point:
-            kp.co[1] += delta
+    for attr, select_attr in KP_ATTRS.items():
+        if only_selected:
+            transform_kp_attr_selected(fcurve.keyframe_points, attr, select_attr, delta)
+        else:
+            transform_kp_attr(fcurve.keyframe_points, attr, delta) 
 
 def is_iterable(o):
     return hasattr(o, "__len__")
