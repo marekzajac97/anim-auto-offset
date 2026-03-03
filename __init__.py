@@ -66,6 +66,13 @@ def save_anim_attr(obj, pre_update, attr, sub_attr):
     attr_val = getattr(obj.animation_data, attr)
     pre_update[attr] = getattr(attr_val, sub_attr) if attr_val else ''
 
+def get_value_from_data_path(obj, data_path):
+    # NOTE: can't use getattr or similar because of paths like pose.bone['Bone']
+    if data_path.startswith('['): # dict-like syntax
+        return eval('obj' + data_path)
+    else:
+        return eval('obj.' + data_path)
+
 def get_fcurves_deltas(obj):
     if obj.animation_data is None:
         return
@@ -82,7 +89,7 @@ def get_fcurves_deltas(obj):
 
     fcurves_pre_update = pre_update['fcurves']
     for data_path, val in fcurves_pre_update.items():
-        data = eval('obj.' + data_path)
+        data = get_value_from_data_path(obj, data_path)
         delta = vectorized(data) - vectorized(val)
         for fcurve in _get_obj_fcurves(obj, data_path):
             fcurve_delta = delta[fcurve.array_index] if is_iterable(delta) else delta
@@ -100,8 +107,7 @@ def save_fcurves_data(obj, depsgraph):
     for fcurve in _get_obj_fcurves(obj):
         if fcurve.data_path in fcurves_pre_update:
             continue
-        # NOTE: can't use getattr or similar because of paths like pose.bone['Bone']
-        data = eval('eval_obj.' + fcurve.data_path)
+        data = get_value_from_data_path(eval_obj, fcurve.data_path)
         try:
             fcurves_pre_update[fcurve.data_path] = vectorized(data)
         except TypeError:
@@ -168,22 +174,6 @@ def post_redo_undo(scene):
     bpy.context.evaluated_depsgraph_get()
     g_is_undo_redo_in_progress = False
 
-
-class DOPESHEET_OT_anim_offset_mode_activate(bpy.types.Operator):
-    bl_idname = "anim_offset_mode.activate"
-    bl_label = "Relative Editing"
-    bl_description = "Update all keyframe points relatively when the property value changes"
-
-    def execute(self, context):
-        context.scene.use_anim_offset_mode = not context.scene.use_anim_offset_mode # switch
-        return {'FINISHED'}
-
-    @classmethod
-    def poll(cls, context):
-        cls.poll_message_set("Cannot be used when Auto Keying is enabled")
-        return not context.scene.tool_settings.use_keyframe_insert_auto
-
-
 class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
     bl_idname = "DOPESHEET_PT_anim_offset_mode"
     bl_label = "Relative Editing"
@@ -200,8 +190,8 @@ def draw_header(self, context):
         return
 
     row = self.layout.row(align=True)
-    row.operator(DOPESHEET_OT_anim_offset_mode_activate.bl_idname, icon='CON_TRANSLIKE',
-                 emboss=True, depress=context.scene.use_anim_offset_mode, text='')
+    row.prop(context.scene, "use_anim_offset_mode", icon='CON_TRANSLIKE', emboss=True, text='')
+    row.active = not context.scene.tool_settings.use_keyframe_insert_auto
     sub = row.row(align=True)
     sub.popover(
         panel=DOPESHEET_PT_anim_offset_mode.bl_idname,
@@ -211,7 +201,7 @@ def draw_header(self, context):
 def register():
     bpy.types.Scene.use_anim_offset_mode = BoolProperty (
             name="Relative Editing",
-            description="Update keyframe points relatively when the property value changes",
+            description="Update all keyframe points relatively when the property value changes",
             default=False
         )
     bpy.types.Scene.anim_offset_mode_only_selected = BoolProperty (
@@ -220,7 +210,6 @@ def register():
             default=False
         )
 
-    bpy.utils.register_class(DOPESHEET_OT_anim_offset_mode_activate)
     bpy.utils.register_class(DOPESHEET_PT_anim_offset_mode)
     bpy.types.GRAPH_HT_header.append(draw_header)
     bpy.types.DOPESHEET_HT_header.append(draw_header)
@@ -243,7 +232,6 @@ def unregister():
     bpy.types.GRAPH_HT_header.remove(draw_header)
 
     bpy.utils.unregister_class(DOPESHEET_PT_anim_offset_mode)
-    bpy.utils.unregister_class(DOPESHEET_OT_anim_offset_mode_activate)
 
     del bpy.types.Scene.anim_offset_mode_only_selected
     del bpy.types.Scene.use_anim_offset_mode
