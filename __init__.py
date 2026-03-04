@@ -29,9 +29,9 @@ def transform_kp_attr_selected(keyframe_points, attr, select_attr, delta):
     keyframe_points.foreach_get(attr, attr_vals)
     selected = [None] * len(keyframe_points)
     keyframe_points.foreach_get(select_attr, selected)
-    for i in list(range(1, len(attr_vals), 2)):
-        if selected:
-            attr_vals[i] += delta
+    for i, sel in enumerate(selected):
+        if sel:
+            attr_vals[1 + i * 2] += delta
     keyframe_points.foreach_set(attr, attr_vals)
 
 KP_ATTRS = {
