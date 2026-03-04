@@ -185,9 +185,9 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
 
 
 def draw_header(self, context):
-    st = context.space_data
-    if st.mode == 'TIMELINE': # don't show in timeline
-        return
+    # st = context.space_data
+    # if st.mode == 'TIMELINE': # don't show in timeline
+    #     return
 
     row = self.layout.row(align=True)
     row.prop(context.scene, "use_anim_offset_mode", icon='CON_TRANSLIKE', emboss=True, text='')
