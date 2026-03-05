@@ -25,11 +25,11 @@ def _get_obj_fcurves(obj):
     action = obj.animation_data.action
     action_slot = obj.animation_data.action_slot
     if not action or not action_slot:
-        return
+        return None
     # TODO: update to support layers in 5.0
     channelbag = action.layers[0].strips[0].channelbag(action_slot)
     if channelbag is None:
-        return
+        return None
     return channelbag.fcurves
 
 KP_ATTRS = {
@@ -93,8 +93,12 @@ def get_fcurves_deltas(obj):
     if has_anim_attr_changed(obj, pre_update, 'action_slot', 'identifier'):
         return
 
+    obj_fcurves = _get_obj_fcurves(obj)
+    if obj_fcurves is None:
+        return
+
     fcurve_map = dict()
-    for fcurve in _get_obj_fcurves(obj):
+    for fcurve in obj_fcurves:
         fcurve_map.setdefault(fcurve.data_path, dict())[fcurve.array_index] = fcurve
 
     fcurves_pre_update = pre_update['fcurves']
@@ -116,8 +120,12 @@ def save_fcurves_data(obj, depsgraph):
     if eval_obj.animation_data is None:
         return
 
+    obj_fcurves = _get_obj_fcurves(obj)
+    if obj_fcurves is None:
+        return
+
     fcurves_pre_update = dict()
-    for fcurve in _get_obj_fcurves(obj):
+    for fcurve in obj_fcurves:
         if fcurve.data_path in fcurves_pre_update:
             continue
         data = get_value_from_data_path(eval_obj, fcurve.data_path)
