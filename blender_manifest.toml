@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "anim_auto_offset"
-version = "1.2.1"
+version = "1.3.0"
 name = "Animation Auto Offset"
 tagline = "Update all keyframes relatively on transform changes"
 maintainer = "Marek Zajac"

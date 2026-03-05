@@ -2,8 +2,26 @@ import bpy # type: ignore
 from bpy.props import BoolProperty # type: ignore
 from bpy.app.handlers import persistent # type: ignore
 from mathutils import Vector # type: ignore
+import numpy as np # type: ignore
 
-def _get_obj_fcurves(obj, data_path=None):
+from . import __package__
+
+class AnimAutoOffsetPreferences(bpy.types.AddonPreferences):
+    bl_idname = __package__
+
+    auto_key_override : BoolProperty (
+            name="Auto keying override",
+            description="When enabled 'Relative editing' mode will switch off 'Auto keying' and vice-versa",
+            default=False
+        ) # # type: ignore
+
+    def draw(self, context):
+        self.layout.prop(self, 'auto_key_override')
+
+def get_is_auto_key_override(context):
+    return context.preferences.addons[__package__].preferences.auto_key_override
+
+def _get_obj_fcurves(obj):
     action = obj.animation_data.action
     action_slot = obj.animation_data.action_slot
     if not action or not action_slot:
@@ -12,27 +30,7 @@ def _get_obj_fcurves(obj, data_path=None):
     channelbag = action.layers[0].strips[0].channelbag(action_slot)
     if channelbag is None:
         return
-    for fcurve in channelbag.fcurves:
-        if data_path and fcurve.data_path != data_path:
-            continue
-        yield fcurve
-
-def transform_kp_attr(keyframe_points, attr, delta):
-    attr_vals = [None] * len(keyframe_points) * 2
-    keyframe_points.foreach_get(attr, attr_vals)
-    for i in list(range(1, len(attr_vals), 2)):
-        attr_vals[i] += delta
-    keyframe_points.foreach_set(attr, attr_vals)
-
-def transform_kp_attr_selected(keyframe_points, attr, select_attr, delta):
-    attr_vals = [None] * len(keyframe_points) * 2
-    keyframe_points.foreach_get(attr, attr_vals)
-    selected = [None] * len(keyframe_points)
-    keyframe_points.foreach_get(select_attr, selected)
-    for i, sel in enumerate(selected):
-        if sel:
-            attr_vals[1 + i * 2] += delta
-    keyframe_points.foreach_set(attr, attr_vals)
+    return channelbag.fcurves
 
 KP_ATTRS = {
     'co': 'select_control_point',
@@ -42,10 +40,18 @@ KP_ATTRS = {
 
 def transform_keyframe_points(fcurve, delta, only_selected=False):
     for attr, select_attr in KP_ATTRS.items():
+        size = len(fcurve.keyframe_points)
+        attr_vals = np.empty(size * 2)
+        fcurve.keyframe_points.foreach_get(attr, attr_vals)
         if only_selected:
-            transform_kp_attr_selected(fcurve.keyframe_points, attr, select_attr, delta)
+            selected = np.empty(size)
+            fcurve.keyframe_points.foreach_get(select_attr, selected)
+            where = np.zeros(size * 2, dtype=bool)
+            where[1::2] = selected
         else:
-            transform_kp_attr(fcurve.keyframe_points, attr, delta) 
+            where = np.tile(np.array([False, True]), size)
+        np.add(attr_vals, delta, out=attr_vals, where=where)
+        fcurve.keyframe_points.foreach_set(attr, attr_vals)
 
 def is_iterable(o):
     return hasattr(o, "__len__")
@@ -87,15 +93,22 @@ def get_fcurves_deltas(obj):
     if has_anim_attr_changed(obj, pre_update, 'action_slot', 'identifier'):
         return
 
+    fcurve_map = dict()
+    for fcurve in _get_obj_fcurves(obj):
+        fcurve_map.setdefault(fcurve.data_path, dict())[fcurve.array_index] = fcurve
+
     fcurves_pre_update = pre_update['fcurves']
     for data_path, val in fcurves_pre_update.items():
+        fcurves = fcurve_map.get(data_path)
+        if not fcurves:
+            continue
         data = get_value_from_data_path(obj, data_path)
-        delta = vectorized(data) - vectorized(val)
-        for fcurve in _get_obj_fcurves(obj, data_path):
-            fcurve_delta = delta[fcurve.array_index] if is_iterable(delta) else delta
-            if fcurve_delta == 0.0: # no change
+        deltas = vectorized(data) - vectorized(val)
+        for i, delta in enumerate(deltas if is_iterable(deltas) else [deltas]):
+            if delta == 0.0: # no change
                 continue
-            yield (fcurve, fcurve_delta)
+            yield (fcurves[i], delta)
+
     del obj['pre_update_data']
 
 def save_fcurves_data(obj, depsgraph):
@@ -141,6 +154,7 @@ def post_depsgraph_update(scene):
         obj = bpy.data.objects.get(update.id.name)
         if not obj:
             continue
+
         for fcurve, delta in get_fcurves_deltas(obj):
             transform_keyframe_points(fcurve, delta, only_selected=only_selected)
 
@@ -174,6 +188,24 @@ def post_redo_undo(scene):
     bpy.context.evaluated_depsgraph_get()
     g_is_undo_redo_in_progress = False
 
+_msgbus_owner = object()
+
+def _register_message_bus() -> None:
+    bpy.msgbus.subscribe_rna(
+        key=(bpy.types.ToolSettings, "use_keyframe_insert_auto"),
+        owner=_msgbus_owner,
+        args=(),
+        notify=_on_auto_key_change,
+        options={"PERSISTENT"},
+    )
+
+def _unregister_message_bus() -> None:
+    bpy.msgbus.clear_by_owner(_msgbus_owner)
+
+@persistent
+def post_load(none, other_none) -> None:
+    _register_message_bus()
+
 class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
     bl_idname = "DOPESHEET_PT_anim_offset_mode"
     bl_label = "Relative Editing"
@@ -183,6 +215,44 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
     def draw(self, context):
         self.layout.prop(context.scene, 'anim_offset_mode_only_selected')
 
+g_auto_key_change_active = False
+g_anim_offset_mode_change_active = False
+
+def _on_anim_offset_mode_change(scene, context):
+    if not get_is_auto_key_override(context):
+        return
+    if g_auto_key_change_active:
+        return
+
+    # XXX: not cleared because message_bus will trigger the _on_auto_key_change() callback AFTER this one
+    global g_anim_offset_mode_change_active
+    g_anim_offset_mode_change_active = True
+
+    tool_settings = scene.tool_settings
+    if scene.use_anim_offset_mode:
+        scene.use_keyframe_insert_auto_old = tool_settings.use_keyframe_insert_auto # save
+        tool_settings.use_keyframe_insert_auto = False
+    else:
+        tool_settings.use_keyframe_insert_auto = scene.use_keyframe_insert_auto_old # restore
+
+def _on_auto_key_change():
+    if not get_is_auto_key_override(bpy.context):
+        return
+
+    global g_anim_offset_mode_change_active
+    if g_anim_offset_mode_change_active:
+        g_anim_offset_mode_change_active = False
+        return
+
+    global g_auto_key_change_active
+    g_auto_key_change_active = True
+
+    tool_settings = bpy.context.tool_settings
+    scene = bpy.context.scene
+    if tool_settings.use_keyframe_insert_auto:
+        scene.use_anim_offset_mode = False
+
+    g_auto_key_change_active = False
 
 def draw_header(self, context):
     # st = context.space_data
@@ -199,18 +269,23 @@ def draw_header(self, context):
     )
 
 def register():
+    bpy.types.Scene.use_keyframe_insert_auto_old = BoolProperty () # internal
+
     bpy.types.Scene.use_anim_offset_mode = BoolProperty (
-            name="Relative Editing",
+            name="Relative editing",
             description="Update all keyframe points relatively when the property value changes",
-            default=False
+            default=False,
+            update=_on_anim_offset_mode_change
         )
     bpy.types.Scene.anim_offset_mode_only_selected = BoolProperty (
             name="Affect only selected keyframes",
-            description="Affect only selected keyframe points when Relative Editing is enabled",
+            description="Affect only selected keyframe points when Relative editing is enabled",
             default=False
         )
-
+    
+    bpy.utils.register_class(AnimAutoOffsetPreferences)
     bpy.utils.register_class(DOPESHEET_PT_anim_offset_mode)
+    _register_message_bus()
     bpy.types.GRAPH_HT_header.append(draw_header)
     bpy.types.DOPESHEET_HT_header.append(draw_header)
     bpy.app.handlers.depsgraph_update_post.append(post_depsgraph_update)
@@ -219,19 +294,22 @@ def register():
     bpy.app.handlers.redo_post.append(post_redo_undo)
     bpy.app.handlers.undo_pre.append(pre_redo_undo)
     bpy.app.handlers.redo_pre.append(pre_redo_undo)
+    bpy.app.handlers.load_post.append(post_load)
 
 def unregister():
+    bpy.app.handlers.load_post.remove(post_load)
     bpy.app.handlers.redo_pre.remove(pre_redo_undo)
     bpy.app.handlers.undo_pre.remove(pre_redo_undo)
     bpy.app.handlers.redo_post.remove(post_redo_undo)
     bpy.app.handlers.undo_post.remove(post_redo_undo)
     bpy.app.handlers.depsgraph_update_pre.remove(pre_depsgraph_update)
     bpy.app.handlers.depsgraph_update_post.remove(post_depsgraph_update)
-
     bpy.types.DOPESHEET_HT_header.remove(draw_header)
     bpy.types.GRAPH_HT_header.remove(draw_header)
-
+    _unregister_message_bus()
     bpy.utils.unregister_class(DOPESHEET_PT_anim_offset_mode)
+    bpy.utils.unregister_class(AnimAutoOffsetPreferences)
 
     del bpy.types.Scene.anim_offset_mode_only_selected
     del bpy.types.Scene.use_anim_offset_mode
+    del bpy.types.Scene.use_keyframe_insert_auto_old
