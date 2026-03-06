@@ -225,7 +225,9 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
     bl_region_type = 'HEADER'
 
     def draw(self, context):
-        self.layout.prop(context.scene, 'anim_offset_mode_only_selected')
+        row = self.layout.row(align=True)
+        row.prop(context.scene, 'anim_offset_mode_only_selected')
+        row.active = context.scene.use_anim_offset_mode
 
 g_auto_key_change_active = False
 g_anim_offset_mode_change_active = False
@@ -272,13 +274,14 @@ def draw_header(self, context):
     #     return
 
     row = self.layout.row(align=True)
-    row.prop(context.scene, "use_anim_offset_mode", icon='CON_TRANSLIKE', emboss=True, text='')
+    row.prop(context.scene, "use_anim_offset_mode", icon='CON_TRANSLIKE', toggle=True, text='')
     row.active = not context.scene.tool_settings.use_keyframe_insert_auto
     sub = row.row(align=True)
     sub.popover(
         panel=DOPESHEET_PT_anim_offset_mode.bl_idname,
         text="",
     )
+    sub.active = context.scene.use_anim_offset_mode
 
 def register():
     bpy.types.Scene.use_keyframe_insert_auto_old = BoolProperty () # internal
