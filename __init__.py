@@ -11,7 +11,7 @@ class AnimAutoOffsetPreferences(bpy.types.AddonPreferences):
 
     auto_key_override : BoolProperty (
             name="Auto keying override",
-            description="When enabled 'Relative editing' mode will switch off 'Auto keying' and vice-versa",
+            description="When enabled 'Relative editing' mode will switch off 'Auto keying' and vice versa",
             default=False
         ) # # type: ignore
 
@@ -109,9 +109,12 @@ def get_fcurves_deltas(obj):
         data = get_value_from_data_path(obj, data_path)
         deltas = vectorized(data) - vectorized(val)
         for i, delta in enumerate(deltas if is_iterable(deltas) else [deltas]):
+            fcurve = fcurves.get(i)
+            if not fcurve: # this index is not animated
+                continue
             if delta == 0.0: # no change
                 continue
-            yield (fcurves[i], delta)
+            yield (fcurve, delta)
 
     del obj['pre_update_data']
 
@@ -120,7 +123,7 @@ def save_fcurves_data(obj, depsgraph):
     if eval_obj.animation_data is None:
         return
 
-    obj_fcurves = _get_obj_fcurves(obj)
+    obj_fcurves = _get_obj_fcurves(eval_obj)
     if obj_fcurves is None:
         return
 
@@ -132,7 +135,7 @@ def save_fcurves_data(obj, depsgraph):
         try:
             fcurves_pre_update[fcurve.data_path] = vectorized(data)
         except TypeError:
-            pass # skip
+            pass # must be non-numeric data like a string/enum, skip
 
     pre_update = dict()
     pre_update['fcurves'] = fcurves_pre_update
@@ -141,6 +144,11 @@ def save_fcurves_data(obj, depsgraph):
     obj['pre_update_data'] = pre_update
 
 g_is_undo_redo_in_progress = False
+
+def is_valid_update(update):
+    return (update.id.id_type == 'OBJECT' and 
+            (update.is_updated_geometry or # this fires for e.g. pose bone transform update
+             update.is_updated_transform))
 
 @persistent
 def post_depsgraph_update(scene):
@@ -155,9 +163,7 @@ def post_depsgraph_update(scene):
 
     depsgraph = bpy.context.view_layer.depsgraph
     for update in depsgraph.updates:
-        if (update.id.id_type != 'OBJECT' or not
-            (update.is_updated_geometry or # this fires for e.g. pose bone transform update
-             update.is_updated_transform)):
+        if not is_valid_update(update):
             continue
         obj = bpy.data.objects.get(update.id.name)
         if not obj:
@@ -174,9 +180,7 @@ def pre_depsgraph_update(scene):
         return
     depsgraph = bpy.context.view_layer.depsgraph
     for update in depsgraph.updates:
-        if (update.id.id_type != 'OBJECT' or not
-            (update.is_updated_geometry or
-             update.is_updated_transform)):
+        if not is_valid_update(update):
             continue
         obj = bpy.data.objects.get(update.id.name)
         if not obj:
