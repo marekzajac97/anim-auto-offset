@@ -79,11 +79,13 @@ def get_value_from_data_path(obj, data_path):
     else:
         return eval('obj.' + data_path)
 
+_pre_update_registry: dict[int, dict] = {}
+
 def get_fcurves_deltas(obj):
     if obj.animation_data is None:
         return
 
-    pre_update = obj.get('pre_update_data')
+    pre_update = _pre_update_registry.pop(obj.as_pointer(), None)
     if pre_update is None:
         return
 
@@ -116,8 +118,6 @@ def get_fcurves_deltas(obj):
                 continue
             yield (fcurve, delta)
 
-    del obj['pre_update_data']
-
 def save_fcurves_data(obj, depsgraph):
     eval_obj = obj.evaluated_get(depsgraph)
     if eval_obj.animation_data is None:
@@ -141,7 +141,7 @@ def save_fcurves_data(obj, depsgraph):
     pre_update['fcurves'] = fcurves_pre_update
     save_anim_attr(eval_obj, pre_update, 'action', 'name')
     save_anim_attr(eval_obj, pre_update, 'action_slot', 'identifier')
-    obj['pre_update_data'] = pre_update
+    _pre_update_registry[obj.as_pointer()] = pre_update
 
 g_is_undo_redo_in_progress = False
 
@@ -171,6 +171,8 @@ def post_depsgraph_update(scene):
 
         for fcurve, delta in get_fcurves_deltas(obj):
             transform_keyframe_points(fcurve, delta, only_selected=only_selected)
+
+    _pre_update_registry.clear()
 
 @persistent
 def pre_depsgraph_update(scene):
