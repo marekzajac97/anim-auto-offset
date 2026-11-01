@@ -564,7 +564,7 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
 
     def cancel(self, context):
         context.scene.anim_offset_easing_window = self._init_value
-        self._redraw(context)
+        self._cleanup(context)
 
 g_auto_key_change_active = False
 g_anim_offset_mode_change_active = False
