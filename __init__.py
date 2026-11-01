@@ -14,7 +14,7 @@ class AnimAutoOffsetPreferences(bpy.types.AddonPreferences):
 
     auto_key_override : BoolProperty (
             name="Auto keying override",
-            description="When enabled 'Relative editing' mode will switch off 'Auto keying' and vice versa",
+            description="When enabled 'Offset editing' mode will switch off 'Auto keying' and vice versa",
             default=False
         ) # # type: ignore
 
@@ -352,7 +352,7 @@ def post_load(none, other_none) -> None:
 
 class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
     bl_idname = "DOPESHEET_PT_anim_offset_mode"
-    bl_label = "Relative Editing"
+    bl_label = "Offset Editing"
     bl_space_type = 'DOPESHEET_EDITOR'
     bl_region_type = 'HEADER'
 
@@ -384,6 +384,28 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
 
         return is_seq
 
+    @staticmethod
+    def _selected_keyframes_are_non_consecutive(obj):
+        fcurves = _get_obj_fcurves(obj)
+        if not fcurves:
+            return False
+
+        for fcurve in fcurves:
+            size = len(fcurve.keyframe_points)
+            if size == 0:
+                continue
+            if not fcurve.select:
+                continue
+
+            selected = np.empty(size, dtype=bool)
+            fcurve.keyframe_points.foreach_get('select_control_point', selected)
+            indices = np.where(selected)[0]
+
+            if len(indices) > 1 and not np.all(np.diff(indices) == 1):
+                return True
+
+        return False
+
     def draw(self, context):
         scene = context.scene
         layout = self.layout
@@ -393,10 +415,11 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
 
         only_sel = scene.anim_offset_mode_only_selected
         is_sequential = True
-        if only_sel:
-            obj = context.active_object
-            if obj and obj.animation_data:
-                is_sequential = self._selected_keyframes_are_sequential(obj)
+        obj = context.active_object
+        obj_is_valid = obj and obj.animation_data
+
+        if only_sel and obj_is_valid:
+            is_sequential = self._selected_keyframes_are_sequential(obj)
 
         col = layout.column(align=True)
         col.active = only_sel and is_sequential
@@ -406,6 +429,14 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
         _col = row.column()
         _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
         _col.enabled = only_sel and is_sequential
+
+        if (only_sel and not is_sequential and scene.anim_offset_easing_window > 0
+            and obj_is_valid and self._selected_keyframes_are_non_consecutive(obj)):
+            warn = col.column(align=True)
+            warn.alert = True
+            warn.label(text='Selected keyframes are not', icon='ERROR')
+            warn.label(text='in consecutive order', icon='BLANK1')
+
         row = col.row(align=False)
         row.active = only_sel and is_sequential and scene.anim_offset_easing_window > 0
         _col = row.column()
@@ -630,15 +661,15 @@ def register():
     bpy.types.Scene.use_keyframe_insert_auto_old = BoolProperty () # internal
 
     bpy.types.Scene.use_anim_offset_mode = BoolProperty (
-            name="Relative editing",
-            description="Update all keyframe points relatively when the property value changes\n"
+            name="Offset editing",
+            description="Apply property value changes as an offset to all keyframe points\n"
                         "NOTE: This option only takes effect when 'Auto keying' is disabled",
             default=False,
             update=_on_anim_offset_mode_change
         )
     bpy.types.Scene.anim_offset_mode_only_selected = BoolProperty (
             name="Affect only selected keyframes",
-            description="Affect only selected keyframe points when Relative editing is enabled",
+            description="Affect only selected keyframe points when Offset editing is enabled",
             default=False
         )
     bpy.types.Scene.anim_offset_easing_window = IntProperty (
