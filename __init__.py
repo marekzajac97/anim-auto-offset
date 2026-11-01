@@ -230,7 +230,10 @@ def get_fcurves_deltas(obj):
         fcurves = fcurve_map.get(data_path)
         if not fcurves:
             continue
-        data = get_value_from_data_path(obj, data_path)
+        try:
+            data = get_value_from_data_path(obj, data_path)
+        except (KeyError, AttributeError, IndexError):
+            continue # stale F-Curve: its property no longer exists on the object
         deltas = vectorized(data) - vectorized(val)
         for i, delta in enumerate(deltas if is_iterable(deltas) else [deltas]):
             fcurve = fcurves.get(i)
@@ -253,7 +256,10 @@ def save_fcurves_data(obj, depsgraph):
     for fcurve in obj_fcurves:
         if fcurve.data_path in fcurves_pre_update:
             continue
-        data = get_value_from_data_path(eval_obj, fcurve.data_path)
+        try:
+            data = get_value_from_data_path(eval_obj, fcurve.data_path)
+        except (KeyError, AttributeError, IndexError):
+            continue # stale F-Curve: its property no longer exists on the object
         try:
             fcurves_pre_update[fcurve.data_path] = vectorized(data)
         except TypeError:
