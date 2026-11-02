@@ -427,12 +427,9 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
         row = col.row(align=True)
         row.prop(scene, 'anim_offset_easing_window_B', text='Before')
         _col = row.column()
-        Easeop = _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
-        Easeop.OperatorDir = 'before'
         row.prop(scene, 'anim_offset_easing_window_A', text='After')
         _col = row.column()
-        Easeop = _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
-        Easeop.OperatorDir = 'after'
+        _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
         _col.enabled = only_sel and is_sequential
 
         if (only_sel and not is_sequential and (scene.anim_offset_easing_window_B > 0 or scene.anim_offset_easing_window_A > 0)
@@ -592,11 +589,18 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
 
     def modal(self, context, event):
         if event.type == 'ESC' or event.type == 'RIGHTMOUSE':
-            self.cancel(context)
-            return {'CANCELLED'}
+            if self.OperatorDir != 'before':
+                self.finish(context)
+                return {'CANCELLED'}
+            else:
+                self.OperatorDir = 'after'
+
         if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
-            self.finish(context)
-            return {'FINISHED'}
+            if self.OperatorDir != 'before':
+                self.finish(context)
+                return {'FINISHED'}
+            else:
+                self.OperatorDir = 'after'
 
         if event.type == 'MOUSEMOVE':
             delta = int((event.mouse_x - self._init_mouse_x) / 10)
@@ -615,9 +619,10 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
     def cancel(self, context):
         if self.OperatorDir == 'before':
             context.scene.anim_offset_easing_window_B = self._init_value
+            self._cleanup(context)
         else:
             context.scene.anim_offset_easing_window_A = self._init_value
-        self._cleanup(context)
+            self._cleanup(context)
 
 g_auto_key_change_active = False
 g_anim_offset_mode_change_active = False
