@@ -85,8 +85,8 @@ EASINGS = {
 }
 
 def _get_easing_weights(fcurve, easing_window_B,easing_window_A, easing_function, easing_mode):
-    if easing_window_B <= 0:
-        return None
+    if easing_window_B <= 0 and easing_window_A <= 0:
+            return None
 
     size = len(fcurve.keyframe_points)
     selected = np.empty(size, dtype=bool)
@@ -435,7 +435,7 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
         Easeop.OperatorDir = 'after'
         _col.enabled = only_sel and is_sequential
 
-        if (only_sel and not is_sequential and scene.anim_offset_easing_window_B > 0
+        if (only_sel and not is_sequential and (scene.anim_offset_easing_window_B > 0 or scene.anim_offset_easing_window_A > 0)
             and obj_is_valid and self._selected_keyframes_are_non_consecutive(obj)):
             warn = col.column(align=True)
             warn.alert = True
@@ -443,7 +443,7 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
             warn.label(text='in consecutive order', icon='BLANK1')
 
         row = col.row(align=False)
-        row.active = only_sel and is_sequential and scene.anim_offset_easing_window_B > 0
+        row.active = only_sel and is_sequential and (scene.anim_offset_easing_window_B > 0 or scene.anim_offset_easing_window_A > 0)
         _col = row.column()
         _col.label(text='Curve:')
         _col.prop_enum(scene, 'anim_offset_easing_function', 'linear', icon='IPO_LINEAR')
