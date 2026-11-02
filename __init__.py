@@ -412,6 +412,8 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
         row = layout.row(align=True)
         row.prop(scene, 'anim_offset_mode_only_selected')
         row.active = scene.use_anim_offset_mode
+        row = layout.row(align=True)
+        row.prop(scene, 'use_asymmetric_window')
 
         only_sel = scene.anim_offset_mode_only_selected
         is_sequential = True
@@ -585,6 +587,7 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
             bpy.types.SpaceGraphEditor.draw_handler_remove(self._draw_handler, 'WINDOW')
             self._draw_handler = None
         context.window.cursor_modal_restore()
+        self.OperatorDir = 'before'
         self._redraw(context)
 
     def modal(self, context, event):
@@ -688,6 +691,13 @@ def register():
             default=False,
             update=_on_anim_offset_mode_change
         )
+    bpy.types.Scene.use_asymmetric_window = BoolProperty (
+            name="Asymmetric Window",
+            description="Apply property value changes as an offset to all keyframe points\n"
+                        "NOTE: This option only takes effect when 'Auto keying' is disabled",
+            default=False,
+            update=_on_anim_offset_mode_change
+        )
     bpy.types.Scene.anim_offset_mode_only_selected = BoolProperty (
             name="Affect only selected keyframes",
             description="Affect only selected keyframe points when Offset editing is enabled",
@@ -765,6 +775,7 @@ def unregister():
     bpy.utils.unregister_class(AnimAutoOffsetPreferences)
 
     del bpy.types.Scene.anim_offset_easing_mode
+    del bpy.types.Scene.use_asymmetric_window
     del bpy.types.Scene.anim_offset_easing_function
     del bpy.types.Scene.anim_offset_easing_window_B
     del bpy.types.Scene.anim_offset_easing_window_A
