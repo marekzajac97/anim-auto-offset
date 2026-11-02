@@ -425,12 +425,14 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
         col.active = only_sel and is_sequential
         col.label(text='Easing Settings:')
         row = col.row(align=True)
-        row.prop(scene, 'anim_offset_easing_window_A', text='Window Before')
+        row.prop(scene, 'anim_offset_easing_window_A', text='Before')
         _col = row.column()
-        _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
-        row.prop(scene, 'anim_offset_easing_window_B', text='Window After')
+        Easeop = _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
+        Easeop.OperatorDir = 'before'
+        row.prop(scene, 'anim_offset_easing_window_B', text='After')
         _col = row.column()
-        _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
+        Easeop = _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
+        Easeop.OperatorDir = 'after'
         _col.enabled = only_sel and is_sequential
 
         if (only_sel and not is_sequential and scene.anim_offset_easing_window_A > 0
@@ -555,6 +557,7 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
     bl_label = "Adjust Easing Window"
     bl_description = "Click and drag left/right to adjust the easing window"
     bl_options = {'BLOCKING', 'GRAB_CURSOR_X'}
+    OperatorDir: bpy.props.StringProperty(name="Operator Direction", default='before',)
 
     _draw_handler = None
 
@@ -565,7 +568,10 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
 
     def invoke(self, context, event):
         self._init_mouse_x = event.mouse_x
-        self._init_value = context.scene.anim_offset_easing_window_A
+        if self.OperatorDir == 'before':
+            self._init_value = context.scene.anim_offset_easing_window_A
+        else:
+            self._init_value = context.scene.anim_offset_easing_window_B
         self._draw_handler = bpy.types.SpaceGraphEditor.draw_handler_add(
             draw_easing_overlay, (), 'WINDOW', 'POST_PIXEL')
         context.window_manager.modal_handler_add(self)
@@ -595,7 +601,10 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
         if event.type == 'MOUSEMOVE':
             delta = int((event.mouse_x - self._init_mouse_x) / 10)
             new_value = max(0, self._init_value + delta)
-            context.scene.anim_offset_easing_window_A = new_value
+            if self.OperatorDir == 'before':
+                context.scene.anim_offset_easing_window_A = new_value
+            else:
+                context.scene.anim_offset_easing_window_B = new_value
             self._redraw(context)
 
         return {'RUNNING_MODAL'}
@@ -604,7 +613,10 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
         self._cleanup(context)
 
     def cancel(self, context):
-        context.scene.anim_offset_easing_window_A = self._init_value
+        if self.OperatorDir == 'before':
+            context.scene.anim_offset_easing_window_A = self._init_value
+        else:
+            context.scene.anim_offset_easing_window_B = self._init_value
         self._cleanup(context)
 
 g_auto_key_change_active = False
