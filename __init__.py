@@ -84,8 +84,8 @@ EASINGS = {
     },
 }
 
-def _get_easing_weights(fcurve, easing_window, easing_function, easing_mode):
-    if easing_window <= 0:
+def _get_easing_weights(fcurve, easing_window_A,easing_window_B, easing_function, easing_mode):
+    if easing_window_A <= 0:
         return None
 
     size = len(fcurve.keyframe_points)
@@ -116,7 +116,7 @@ def _get_easing_weights(fcurve, easing_window, easing_function, easing_mode):
 
     # BEFORE selected range: weight fades from 0 (far edge) to ~1 (at selected boundary),
     # with t computed from actual frame positions so uneven keyframe spacing is respected.
-    win_start = max(0, first_sel - easing_window)
+    win_start = max(0, first_sel - easing_window_A)
     win_end = first_sel
     if win_start < win_end:
         far_frame = fcurve.keyframe_points[win_start].co[0]
@@ -129,7 +129,7 @@ def _get_easing_weights(fcurve, easing_window, easing_function, easing_mode):
 
     # AFTER selected range: weight fades from ~1 (at selected boundary) to 0 (far edge).
     win_start = last_sel + 1
-    win_end = min(size, last_sel + easing_window + 1)
+    win_end = min(size, last_sel + easing_window_B + 1)
     if win_start < win_end:
         near_frame = fcurve.keyframe_points[last_sel].co[0]
         far_frame = fcurve.keyframe_points[win_end - 1].co[0]
@@ -142,7 +142,7 @@ def _get_easing_weights(fcurve, easing_window, easing_function, easing_mode):
     return weights
 
 def transform_keyframe_points(fcurve, delta, only_selected=False,
-                              easing_window=0, easing_function='linear',
+                              easing_window_A=0,easing_window_B=0, easing_function='linear',
                               easing_mode='in_out'):
     size = len(fcurve.keyframe_points)
     if size == 0:
@@ -150,7 +150,7 @@ def transform_keyframe_points(fcurve, delta, only_selected=False,
 
     easing_weights = None
     if only_selected:
-        easing_weights = _get_easing_weights(fcurve, easing_window, easing_function, easing_mode)
+        easing_weights = _get_easing_weights(fcurve, easing_window_A, easing_window_B, easing_function, easing_mode)
 
     if easing_weights is not None:
         for attr, _select_attr in KP_ATTRS.items():
@@ -298,7 +298,7 @@ def post_depsgraph_update(scene):
         for fcurve, delta in get_fcurves_deltas(obj):
             transform_keyframe_points(fcurve, delta,
                                       only_selected=scene.anim_offset_mode_only_selected,
-                                      easing_window=scene.anim_offset_easing_window,
+                                      easing_window_A=scene.anim_offset_easing_window_A,easing_window_B=scene.anim_offset_easing_window_B,
                                       easing_function=scene.anim_offset_easing_function,
                                       easing_mode=scene.anim_offset_easing_mode)
 
@@ -425,12 +425,15 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
         col.active = only_sel and is_sequential
         col.label(text='Easing Settings:')
         row = col.row(align=True)
-        row.prop(scene, 'anim_offset_easing_window', text='Window')
+        row.prop(scene, 'anim_offset_easing_window_A', text='Window Before')
+        _col = row.column()
+        _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
+        row.prop(scene, 'anim_offset_easing_window_B', text='Window After')
         _col = row.column()
         _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
         _col.enabled = only_sel and is_sequential
 
-        if (only_sel and not is_sequential and scene.anim_offset_easing_window > 0
+        if (only_sel and not is_sequential and scene.anim_offset_easing_window_A > 0
             and obj_is_valid and self._selected_keyframes_are_non_consecutive(obj)):
             warn = col.column(align=True)
             warn.alert = True
@@ -438,7 +441,7 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
             warn.label(text='in consecutive order', icon='BLANK1')
 
         row = col.row(align=False)
-        row.active = only_sel and is_sequential and scene.anim_offset_easing_window > 0
+        row.active = only_sel and is_sequential and scene.anim_offset_easing_window_A > 0
         _col = row.column()
         _col.label(text='Curve:')
         _col.prop_enum(scene, 'anim_offset_easing_function', 'linear', icon='IPO_LINEAR')
@@ -468,7 +471,8 @@ def draw_easing_overlay():
     scene = context.scene
     if not scene.use_anim_offset_mode or not scene.anim_offset_mode_only_selected:
         return
-    window = scene.anim_offset_easing_window
+    windowA = scene.anim_offset_easing_window_A
+    windowB = scene.anim_offset_easing_window_B
 
     view2d, region = _get_graph_editor_view2d(context)
     if not view2d:
@@ -511,8 +515,8 @@ def draw_easing_overlay():
         min_sel_frame = min(min_sel_frame, first_frame)
         max_sel_frame = max(max_sel_frame, last_frame)
 
-        ws_idx = max(0, first_idx - window)
-        we_idx = min(size - 1, last_idx + window)
+        ws_idx = max(0, first_idx - windowA)
+        we_idx = min(size - 1, last_idx + windowB)
         min_window_frame = min(min_window_frame, fcurve.keyframe_points[ws_idx].co[0])
         max_window_frame = max(max_window_frame, fcurve.keyframe_points[we_idx].co[0])
 
@@ -538,10 +542,10 @@ def draw_easing_overlay():
         shader.uniform_float("color", color)
         batch.draw(shader)
 
-    if window > 0 and x_sel_start > x_win_start:
+    if windowA > 0 and x_sel_start > x_win_start:
         draw_band(x_win_start, x_sel_start, (0.25, 0.75, 0.25, 0.12))
     draw_band(x_sel_start, x_sel_end, (0.25, 0.75, 0.25, 0.30))
-    if window > 0 and x_win_end > x_sel_end:
+    if windowB > 0 and x_win_end > x_sel_end:
         draw_band(x_sel_end, x_win_end, (0.25, 0.75, 0.25, 0.12))
 
     gpu.state.blend_set('NONE')
@@ -561,7 +565,7 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
 
     def invoke(self, context, event):
         self._init_mouse_x = event.mouse_x
-        self._init_value = context.scene.anim_offset_easing_window
+        self._init_value = context.scene.anim_offset_easing_window_A
         self._draw_handler = bpy.types.SpaceGraphEditor.draw_handler_add(
             draw_easing_overlay, (), 'WINDOW', 'POST_PIXEL')
         context.window_manager.modal_handler_add(self)
@@ -591,7 +595,7 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
         if event.type == 'MOUSEMOVE':
             delta = int((event.mouse_x - self._init_mouse_x) / 10)
             new_value = max(0, self._init_value + delta)
-            context.scene.anim_offset_easing_window = new_value
+            context.scene.anim_offset_easing_window_A = new_value
             self._redraw(context)
 
         return {'RUNNING_MODAL'}
@@ -600,7 +604,7 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
         self._cleanup(context)
 
     def cancel(self, context):
-        context.scene.anim_offset_easing_window = self._init_value
+        context.scene.anim_offset_easing_window_A = self._init_value
         self._cleanup(context)
 
 g_auto_key_change_active = False
@@ -672,8 +676,16 @@ def register():
             description="Affect only selected keyframe points when Offset editing is enabled",
             default=False
         )
-    bpy.types.Scene.anim_offset_easing_window = IntProperty (
+    bpy.types.Scene.anim_offset_easing_window_A = IntProperty (
             name="Easing window",
+            description="Number of keyframes before and after the selected range to blend with the applied offset\n"
+                        "NOTE: This option only takes effect when the selected keyframes (for all F-Curves) are in consecutive order",
+            default=0,
+            min=0,
+            max=9999,
+        )
+    bpy.types.Scene.anim_offset_easing_window_B = IntProperty (
+            name="Easing window after",
             description="Number of keyframes before and after the selected range to blend with the applied offset\n"
                         "NOTE: This option only takes effect when the selected keyframes (for all F-Curves) are in consecutive order",
             default=0,
@@ -737,7 +749,8 @@ def unregister():
 
     del bpy.types.Scene.anim_offset_easing_mode
     del bpy.types.Scene.anim_offset_easing_function
-    del bpy.types.Scene.anim_offset_easing_window
+    del bpy.types.Scene.anim_offset_easing_window_A
+    del bpy.types.Scene.anim_offset_easing_window_B
     del bpy.types.Scene.anim_offset_mode_only_selected
     del bpy.types.Scene.use_anim_offset_mode
     del bpy.types.Scene.use_keyframe_insert_auto_old
