@@ -427,9 +427,12 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
         col.active = only_sel and is_sequential
         col.label(text='Easing Settings:')
         row = col.row(align=True)
-        row.prop(scene, 'anim_offset_easing_window_B', text='Before')
-        _col = row.column()
-        row.prop(scene, 'anim_offset_easing_window_A', text='After')
+        if scene.use_asymmetric_window is True:
+            row.prop(scene, 'anim_offset_easing_window_B', text='Before')
+            _col = row.column()
+            row.prop(scene, 'anim_offset_easing_window_A', text='After')
+        else:
+            row.prop(scene, 'anim_offset_easing_window_B', text='Window')
         _col = row.column()
         _col.operator('anim.adjust_easing_window', text='', icon='DRIVER_DISTANCE')
         _col.enabled = only_sel and is_sequential
@@ -567,7 +570,7 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
 
     def invoke(self, context, event):
         self._init_mouse_x = event.mouse_x
-        if self.OperatorDir == 'before':
+        if self.OperatorDir == 'before' or context.scene.use_asymmetric_window is False:
             self._init_value = context.scene.anim_offset_easing_window_B
         else:
             self._init_value = context.scene.anim_offset_easing_window_A
@@ -592,14 +595,14 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
 
     def modal(self, context, event):
         if event.type == 'ESC' or event.type == 'RIGHTMOUSE':
-            if self.OperatorDir != 'before':
+            if self.OperatorDir != 'before' or context.scene.use_asymmetric_window is True:
                 self.finish(context)
                 return {'CANCELLED'}
             else:
                 self.OperatorDir = 'after'
 
         if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
-            if self.OperatorDir != 'before':
+            if self.OperatorDir != 'before' or context.scene.use_asymmetric_window is False:
                 self.finish(context)
                 return {'FINISHED'}
             else:
@@ -608,7 +611,10 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
         if event.type == 'MOUSEMOVE':
             delta = int((event.mouse_x - self._init_mouse_x) / 10)
             new_value = max(0, self._init_value + delta)
-            if self.OperatorDir == 'before':
+            if context.scene.use_asymmetric_window is False:
+                context.scene.anim_offset_easing_window_B = new_value
+                context.scene.anim_offset_easing_window_A = new_value
+            elif self.OperatorDir == 'before':
                 context.scene.anim_offset_easing_window_B = new_value
             else:
                 context.scene.anim_offset_easing_window_A = new_value
