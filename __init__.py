@@ -147,7 +147,6 @@ def transform_keyframe_points(fcurve, delta, only_selected=False,
     size = len(fcurve.keyframe_points)
     if size == 0:
         return
-
     easing_weights = None
     if only_selected:
         easing_weights = _get_easing_weights(fcurve, easing_window_B, easing_window_A, easing_function, easing_mode)
@@ -288,6 +287,11 @@ def post_depsgraph_update(scene):
         return
 
     depsgraph = bpy.context.view_layer.depsgraph
+    window_B = scene.anim_offset_easing_window_B
+    if scene.use_asymmetric_window is False:
+        window_A = scene.anim_offset_easing_window_B
+    else:
+        window_A = scene.anim_offset_easing_window_A
     for update in depsgraph.updates:
         if not is_valid_update(update):
             continue
@@ -298,7 +302,7 @@ def post_depsgraph_update(scene):
         for fcurve, delta in get_fcurves_deltas(obj):
             transform_keyframe_points(fcurve, delta,
                                       only_selected=scene.anim_offset_mode_only_selected,
-                                      easing_window_B=scene.anim_offset_easing_window_B,easing_window_A=scene.anim_offset_easing_window_A,
+                                      easing_window_B=window_B,easing_window_A=window_A,
                                       easing_function=scene.anim_offset_easing_function,
                                       easing_mode=scene.anim_offset_easing_mode)
 
@@ -476,7 +480,10 @@ def draw_easing_overlay():
     if not scene.use_anim_offset_mode or not scene.anim_offset_mode_only_selected:
         return
     windowB = scene.anim_offset_easing_window_B
-    windowA = scene.anim_offset_easing_window_A
+    if scene.use_asymmetric_window is False:
+        windowA = scene.anim_offset_easing_window_B
+    else:
+        windowA = scene.anim_offset_easing_window_A
 
     view2d, region = _get_graph_editor_view2d(context)
     if not view2d:
