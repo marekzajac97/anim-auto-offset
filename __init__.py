@@ -18,11 +18,21 @@ class AnimAutoOffsetPreferences(bpy.types.AddonPreferences):
             default=False
         ) # # type: ignore
 
+    easing_overlay_gradient : BoolProperty (
+            name="Gradient easing overlay",
+            description="Show the easing window overlay opacity as a gradient matching the easing curve",
+            default=False
+        ) # # type: ignore
+
     def draw(self, context):
         self.layout.prop(self, 'auto_key_override')
+        self.layout.prop(self, 'easing_overlay_gradient')
 
 def get_is_auto_key_override(context):
     return context.preferences.addons[__package__].preferences.auto_key_override
+
+def get_is_easing_overlay_gradient(context):
+    return context.preferences.addons[__package__].preferences.easing_overlay_gradient
 
 def _get_obj_fcurves(obj):
     action = obj.animation_data.action
@@ -83,6 +93,8 @@ EASINGS = {
         'in_out': lambda t: (1 - math.sqrt(1 - (2 * t) ** 2)) / 2 if t < 0.5 else (math.sqrt(1 - (-2 * t + 2) ** 2) + 1) / 2,
     },
 }
+
+EASING_FUNCTIONS = tuple(EASINGS)
 
 def _get_easing_weights(fcurve, easing_window, easing_function, easing_mode):
     easing_window_B, easing_window_A = easing_window
@@ -541,32 +553,71 @@ def draw_easing_overlay():
     x_sel_start = view2d.view_to_region(min_sel_frame, 0.0, clip=False)[0]
     x_sel_end = view2d.view_to_region(max_sel_frame, 0.0, clip=False)[0]
 
-    shader = gpu.shader.from_builtin('UNIFORM_COLOR')
     gpu.state.blend_set('ALPHA')
 
-    def draw_band(x0, x1, color):
-        if x1 <= x0:
-            return
-        verts = [(x0, y_bottom), (x1, y_bottom), (x1, y_top), (x0, y_top)]
-        batch = batch_for_shader(shader, 'TRI_FAN', {"pos": verts})
-        shader.uniform_float("color", color)
-        batch.draw(shader)
+    if get_is_easing_overlay_gradient(context):
+        easing_fun = EASINGS[scene.anim_offset_easing_function][scene.anim_offset_easing_mode]
 
-    if windowB > 0 and x_sel_start > x_win_start:
-        draw_band(x_win_start, x_sel_start, (0.25, 0.75, 0.25, 0.12))
-    draw_band(x_sel_start, x_sel_end, (0.25, 0.75, 0.25, 0.30))
-    if windowA > 0 and x_win_end > x_sel_end:
-        draw_band(x_sel_end, x_win_end, (0.25, 0.75, 0.25, 0.12))
+        def ease(t):
+            if t <= 0:
+                return 0.0
+            if t >= 1:
+                return 1.0
+            return easing_fun(t)
+
+        shader = gpu.shader.from_builtin('SMOOTH_COLOR')
+
+        def draw_band(x0, x1, weight_at, color):
+            if x1 <= x0:
+                return
+            r, g, b, a = color
+            segments = max(1, int(abs(x1 - x0) / 4))
+            verts = []
+            colors = []
+            for i in range(segments + 1):
+                u = i / segments
+                x = x0 + (x1 - x0) * u
+                alpha = a * max(0.0, min(1.0, weight_at(u)))
+                verts.append((x, y_bottom))
+                verts.append((x, y_top))
+                colors.append((r, g, b, alpha))
+                colors.append((r, g, b, alpha))
+            batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": verts, "color": colors})
+            batch.draw(shader)
+
+        color = (0.25, 0.75, 0.25, 0.30)
+        if windowB > 0 and x_sel_start > x_win_start:
+            draw_band(x_win_start, x_sel_start, ease, color)
+        draw_band(x_sel_start, x_sel_end, lambda u: 1.0, color)
+        if windowA > 0 and x_win_end > x_sel_end:
+            draw_band(x_sel_end, x_win_end, lambda u: ease(1.0 - u), color)
+    else:
+        shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+
+        def draw_band(x0, x1, color):
+            if x1 <= x0:
+                return
+            verts = [(x0, y_bottom), (x1, y_bottom), (x1, y_top), (x0, y_top)]
+            batch = batch_for_shader(shader, 'TRI_FAN', {"pos": verts})
+            shader.uniform_float("color", color)
+            batch.draw(shader)
+
+        if windowB > 0 and x_sel_start > x_win_start:
+            draw_band(x_win_start, x_sel_start, (0.25, 0.75, 0.25, 0.12))
+        draw_band(x_sel_start, x_sel_end, (0.25, 0.75, 0.25, 0.30))
+        if windowA > 0 and x_win_end > x_sel_end:
+            draw_band(x_sel_end, x_win_end, (0.25, 0.75, 0.25, 0.12))
 
     gpu.state.blend_set('NONE')
 
 class ANIM_OT_adjust_easing_window(bpy.types.Operator):
     bl_idname = "anim.adjust_easing_window"
     bl_label = "Adjust Easing Window"
-    bl_description = "Click and drag left/right to adjust the easing window"
+    bl_description = "Move the mouse left/right to adjust the easing window, click to confirm, scroll to cycle the easing curve"
     bl_options = {'BLOCKING', 'GRAB_CURSOR_X'}
 
     _draw_handler = None
+    _popup_region = None
 
     @classmethod
     def poll(cls, context):
@@ -577,7 +628,9 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
         self._stage = 'before'
         self._init_mouse_x = event.mouse_x
         self._init_window = tuple(context.scene.anim_offset_easing_window_sizes)
+        self._init_easing_function = context.scene.anim_offset_easing_function
         self._init_value = self._init_window[0]
+        self._popup_region = context.region_popup
         self._draw_handler = bpy.types.SpaceGraphEditor.draw_handler_add(
             draw_easing_overlay, (), 'WINDOW', 'POST_PIXEL')
         context.window_manager.modal_handler_add(self)
@@ -588,6 +641,11 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
         for area in context.screen.areas:
             if area.type == 'GRAPH_EDITOR':
                 area.tag_redraw()
+        try:
+            if self._popup_region:
+                self._popup_region.tag_refresh_ui()
+        except ReferenceError:
+            self._popup_region = None
 
     def _cleanup(self, context):
         if self._draw_handler:
@@ -600,6 +658,15 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
         if event.type == 'ESC' or event.type == 'RIGHTMOUSE':
             self.cancel(context)
             return {'CANCELLED'}
+
+        if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
+            current = context.scene.anim_offset_easing_function
+            index = EASING_FUNCTIONS.index(current)
+            step = 1 if event.type == 'WHEELUPMOUSE' else -1
+            context.scene.anim_offset_easing_function = EASING_FUNCTIONS[
+                (index + step) % len(EASING_FUNCTIONS)]
+            self._redraw(context)
+            return {'RUNNING_MODAL'}
 
         if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
             if context.scene.anim_offset_use_asymmetric_window is True and self._stage == 'before':
@@ -628,6 +695,7 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
 
     def cancel(self, context):
         context.scene.anim_offset_easing_window_sizes = self._init_window
+        context.scene.anim_offset_easing_function = self._init_easing_function
         self._cleanup(context)
 
 g_auto_key_change_active = False
