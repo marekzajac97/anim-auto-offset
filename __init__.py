@@ -479,15 +479,21 @@ class DOPESHEET_PT_anim_offset_mode(bpy.types.Panel):
         _col.prop_enum(scene, 'anim_offset_easing_mode', 'out', icon='IPO_EASE_OUT')
         _col.prop_enum(scene, 'anim_offset_easing_mode', 'in_out', icon='IPO_EASE_IN_OUT')
 
-def _get_graph_editor_view2d(context):
+_ANIM_EDITOR_TYPES = {'GRAPH_EDITOR', 'DOPESHEET_EDITOR'}
+
+def _get_anim_editor_view2d(context, space_type):
+    region = context.region
+    if (region and region.type == 'WINDOW' and context.area
+            and context.area.type == space_type):
+        return region.view2d, region
     for area in context.screen.areas:
-        if area.type == 'GRAPH_EDITOR':
-            for region in area.regions:
-                if region.type == 'WINDOW':
-                    return region.view2d, region
+        if area.type == space_type:
+            for r in area.regions:
+                if r.type == 'WINDOW':
+                    return r.view2d, r
     return None, None
 
-def draw_easing_overlay():
+def draw_easing_overlay(space_type):
     context = bpy.context
     scene = context.scene
     if not scene.use_anim_offset_mode or not scene.anim_offset_mode_only_selected:
@@ -496,7 +502,7 @@ def draw_easing_overlay():
     windowB = max(0, window[0])
     windowA = max(0, window[1])
 
-    view2d, region = _get_graph_editor_view2d(context)
+    view2d, region = _get_anim_editor_view2d(context, space_type)
     if not view2d:
         return
 
@@ -616,7 +622,7 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
     bl_description = "Move the mouse left/right to adjust the easing window, click to confirm, scroll to cycle the easing curve"
     bl_options = {'BLOCKING', 'GRAB_CURSOR_X'}
 
-    _draw_handler = None
+    _draw_handlers = ()
     _popup_region = None
 
     @classmethod
@@ -631,15 +637,21 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
         self._init_easing_function = context.scene.anim_offset_easing_function
         self._init_value = self._init_window[0]
         self._popup_region = context.region_popup
-        self._draw_handler = bpy.types.SpaceGraphEditor.draw_handler_add(
-            draw_easing_overlay, (), 'WINDOW', 'POST_PIXEL')
+        self._draw_handlers = [
+            (space_cls, space_cls.draw_handler_add(
+                draw_easing_overlay, (space_type,), 'WINDOW', 'POST_PIXEL'))
+            for space_cls, space_type in (
+                (bpy.types.SpaceGraphEditor, 'GRAPH_EDITOR'),
+                (bpy.types.SpaceDopeSheetEditor, 'DOPESHEET_EDITOR'),
+            )
+        ]
         context.window_manager.modal_handler_add(self)
         context.window.cursor_modal_set('MOVE_X')
         return {'RUNNING_MODAL'}
 
     def _redraw(self, context):
         for area in context.screen.areas:
-            if area.type == 'GRAPH_EDITOR':
+            if area.type in _ANIM_EDITOR_TYPES:
                 area.tag_redraw()
         try:
             if self._popup_region:
@@ -648,9 +660,9 @@ class ANIM_OT_adjust_easing_window(bpy.types.Operator):
             self._popup_region = None
 
     def _cleanup(self, context):
-        if self._draw_handler:
-            bpy.types.SpaceGraphEditor.draw_handler_remove(self._draw_handler, 'WINDOW')
-            self._draw_handler = None
+        for space_cls, handler in self._draw_handlers:
+            space_cls.draw_handler_remove(handler, 'WINDOW')
+        self._draw_handlers = ()
         context.window.cursor_modal_restore()
         self._redraw(context)
 
