@@ -21,7 +21,8 @@ When only a range of keyframes is affected, the offset can end abruptly at the e
 In the Offset Editing popover:
 
 - **Window** — how many keyframes on each side of the selection participate in the blend. `0` disables easing and applies the full offset to the selected keyframes only.
-- **Adjust Easing Window** (the drag button next to the window value) — click and drag left/right in the viewport to interactively change the window size. The affected keyframe ranges are highlighted in green in the Graph Editor while dragging. Release the left mouse button to confirm, or press `Esc` / right-click to cancel and restore the previous value.
+- **Asymmetric Window** — enable to set separate **Before** and **After** window sizes instead of a single **Window** value.
+- **Adjust Easing Window** (the drag button next to the window value) — click and drag left/right in the viewport to interactively change the window size. The affected keyframe ranges are highlighted in green in the Graph Editor while dragging. Release the left mouse button to confirm, or press `Esc` / right-click to cancel and restore the previous value. With **Asymmetric Window** enabled, drag once to set **Before**, release, drag again to set **After**, then click to confirm.
 - **Curve** — the shape of the blend: Linear, Sine, Quadratic, Cubic, Quartic, Quintic, Exponential, or Circular.
 - **Mode** — the easing direction: **In** (slow start, fast end), **Out** (fast start, slow end), or **In & Out** (S-curve).
 
