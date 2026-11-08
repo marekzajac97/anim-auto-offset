@@ -42,9 +42,11 @@ In the Offset Editing panel:
 
 - **Window** — how many keyframes on each side of the selection participate in the blend. `0` disables easing and applies the full offset to the selected keyframes only.
 - **Asymmetric Window** — enable to set separate **Before** and **After** window sizes instead of a single **Window** value.
-- **Adjust Easing Window** (the drag button next to the window value) — move the mouse left/right to change the window size. The affected keyframe ranges are highlighted in green in the Graph Editor and Dope Sheet while adjusting. Click the left mouse button to confirm, or press `Esc` / right-click to cancel and restore the previous value. With **Asymmetric Window** enabled, move to set **Before** and click, then move to set **After** and click again to confirm. Enable **Gradient easing overlay** in the add-on preferences to make the highlight opacity follow the selected easing curve.
+- **Adjust Easing Window** (the drag button next to the window value) — move the mouse left/right to change the window size. The affected keyframe ranges are highlighted in green in the Graph Editor and Dope Sheet while adjusting. Click the left mouse button to confirm, or press `Esc` / right-click to cancel and restore the previous value. With **Asymmetric Window** enabled, move to set **Before** and click, then move to set **After** and click again to confirm. Enable **Gradient easing overlay** in the add-on preferences for a softer ramp; the curve profile is drawn in either case.
 - **Curve** — the shape of the blend: Linear, Sine, Quadratic, Cubic, Quartic, Quintic, Exponential, or Circular.
-- **Mode** — the easing direction: **In** (slow start, fast end), **Out** (fast start, slow end), or **In & Out** (S-curve).
+- **Mode** — the easing direction: **In** (slow start, fast end), **Out** (fast start, slow end), or **In & Out** (S-curve). Linear has no In/Out distinction, so the three modes look and behave the same until a non-linear curve is picked.
+
+The green overlay is shaped by the chosen curve and mode, so switching between In, Out and In & Out changes how the band fades at the edges: *In* stays faint for most of the extension and only darkens next to the selection, *Out* is almost opaque right away, *In & Out* is an S-curve. The flat fill behind it still shows the full extent of the window.
 
 Easing requires the selected keyframes to be consecutive on every animated channel. If the selection is not sequential, the easing settings are disabled and the full offset is applied to the selected keyframes.
 
