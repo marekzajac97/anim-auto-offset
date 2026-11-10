@@ -15,7 +15,7 @@ This means you can pose a character or object with the normal move/rotate/scale 
 
 By default every keyframe of the edited property is offset. Enable **Affect only selected keyframes** to restrict the offset to the keyframes currently selected in the Graph Editor or Dope Sheet.
 
-**Affect only selected keyframes** and **Auto select keys by frame** are both on by default. When the add-on is enabled it switches Offset Editing on and selects the keyframe at the current frame, so the mode is ready to use immediately.
+**Offset editing**, **Affect only selected keyframes** and **Auto select keys by frame** are all off by default, and switching the add-on on does not flip them: a new file opens with the add-on idle and the scene untouched until you enable what you need.
 
 ## Sidebar
 

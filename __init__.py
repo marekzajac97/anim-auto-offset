@@ -541,65 +541,11 @@ def _register_message_bus() -> None:
 def _unregister_message_bus() -> None:
     bpy.msgbus.clear_by_owner(_msgbus_owner)
 
-def _initial_auto_select_setup():
-    """Turn on the two offset options and select the keys at the current frame.
-
-    register() runs before the scene and the UI exist, so this is deferred to a
-    timer: applying it here writes the scene properties, then apply_auto_select()
-    picks the keyframe nearest frame_current for every animated object.
-    """
-    if not g_is_registered:
-        return None
-    try:
-        scene = bpy.context.scene
-    except AttributeError:
-        scene = None
-    if scene is None:
-        return None
-    try:
-        scene.anim_offset_mode_only_selected = True
-        if not scene.anim_offset_auto_select_by_frame:
-            # the property has an update callback that already reselects
-            scene.anim_offset_auto_select_by_frame = True
-        else:
-            apply_auto_select(bpy.context)
-        if not scene.use_anim_offset_mode:
-            # the auto select only acts while Offset editing is on; switching it on
-            # is what the user asked for, and it also stops Auto keying
-            scene.use_anim_offset_mode = True
-        apply_auto_select(bpy.context)
-    except (AttributeError, ReferenceError, RuntimeError):
-        pass
-    screen = getattr(bpy.context, 'screen', None)
-    for area in getattr(screen, 'areas', ()):
-        if area.type in _ANIM_EDITOR_TYPES:
-            area.tag_redraw()
-    return None
-
-
-def _defer_initial_auto_select_setup():
-    """Queue the one-shot setup for the next event loop tick."""
-    try:
-        if not bpy.app.timers.is_registered(_initial_auto_select_setup):
-            bpy.app.timers.register(_initial_auto_select_setup, first_interval=0.0)
-    except (AttributeError, ValueError):
-        pass
-
-
-def _cancel_initial_auto_select_setup():
-    try:
-        if bpy.app.timers.is_registered(_initial_auto_select_setup):
-            bpy.app.timers.unregister(_initial_auto_select_setup)
-    except (AttributeError, ValueError):
-        pass
-
-
 def post_load(none, other_none) -> None:
     _register_message_bus()
     # a reload can drop the key up event that clears the wheel modifier
     _clear_hold_keys()
     _stop_hold3_overlay()
-    _defer_initial_auto_select_setup()
 
 
 @persistent
@@ -1728,14 +1674,14 @@ def register():
     bpy.types.Scene.anim_offset_mode_only_selected = BoolProperty (
             name="Affect only selected keyframes",
             description="Affect only selected keyframe points when Offset editing is enabled",
-            default=True
+            default=False
         )
     bpy.types.Scene.anim_offset_auto_select_by_frame = BoolProperty (
             name="Auto select keys by frame",
             description="Automatically select the keyframe points around the current frame\n"
                         "Hold 1 and scroll the mouse wheel to extend the selection to the left,\n"
                         "hold 2 to extend it to the right, hold both keys to extend both sides",
-            default=True,
+            default=False,
             update=_on_auto_select_change
         )
     bpy.types.Scene.anim_offset_auto_select_counts = IntVectorProperty (
@@ -1813,11 +1759,8 @@ def register():
     _add_handler(bpy.app.handlers.load_post, post_load)
     _add_handler(bpy.app.handlers.frame_change_post, auto_select_frame_change)
     _register_auto_select_keymaps()
-    # honour the new defaults right away (deferred: the scene is not ready yet)
-    _defer_initial_auto_select_setup()
 
 def unregister():
-    _cancel_initial_auto_select_setup()
     _unregister_auto_select_keymaps()
     _clear_hold_keys()
     _stop_hold3_overlay()
