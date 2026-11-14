@@ -58,8 +58,8 @@ EASINGS = {
         'in_out': lambda t: t,
     },
     'sine': {
-        'in':     lambda t: math.sin(t * math.pi / 2),
-        'out':    lambda t: 1 - math.cos(t * math.pi / 2),
+        'in':     lambda t: 1 - math.cos(t * math.pi / 2),
+        'out':    lambda t: math.sin(t * math.pi / 2),
         'in_out': lambda t: -(math.cos(t * math.pi) - 1) / 2,
     },
     'quadratic': {
@@ -524,7 +524,11 @@ def draw_easing_overlay(space_type):
             continue
 
         size = len(fcurve.keyframe_points)
-        if size == 0:
+        if size < 2:
+            # A channel with a single keyframe has no neighbour to blend with, so
+            # it cannot describe an easing window. Leaving it in the union pinned
+            # both the selection and the window edge to that one frame, which
+            # flattened the "before" band of every other channel to zero width.
             continue
         selected = np.empty(size, dtype=bool)
         fcurve.keyframe_points.foreach_get('select_control_point', selected)
